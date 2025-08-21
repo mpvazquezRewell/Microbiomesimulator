@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Microbioma con Análisis IA (20 Especies)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/showdown/dist/showdown.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .species-card {
+            transition: all 0.3s ease-in-out;
+            cursor: pointer;
+        }
+        .species-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .modal-backdrop {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.6); z-index: 40; opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-container {
+            display: none; position: fixed; top: 50%; left: 50%;
+            transform: translate(-50%, -50%) scale(0.95); width: 90%; max-width: 600px;
+            max-height: 80vh; overflow-y: auto; background-color: white; z-index: 50;
+            opacity: 0; transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+        }
+        .modal-backdrop.show, .modal-container.show { display: block; opacity: 1; }
+        .modal-container.show { transform: translate(-50%, -50%) scale(1); }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-900 dark:text-white">Simulador de Microbioma con Análisis IA</h1>
+            <p class="mt-2 text-lg text-gray-600 dark:text-gray-400">Observa, simula y obtén recomendaciones personalizadas con IA.</p>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Columna de Controles -->
+            <div class="lg:col-span-1 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg h-fit">
+                <h2 class="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">Panel de Control</h2>
+                
+                <div class="mb-6">
+                    <label for="diet-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">1. Selecciona una Dieta:</label>
+                    <select id="diet-select" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5">
+                        <option value="industrialized" selected>Dieta Industrializada 🍔</option>
+                        <option value="mediterranean">Dieta Mediterránea 🥗</option>
+                        <option value="keto">Dieta Cetogénica 🥑</option>
+                        <option value="vegan">Dieta Vegana 🥦</option>
+                    </select>
+                </div>
+
+                <div class="flex flex-col space-y-3 mb-6">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0">2. Simula el paso del tiempo:</label>
+                    <button id="simulate-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 shadow-md">
+                        Simular 1 Mes
+                    </button>
+                    <button id="reset-btn" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 shadow-md">
+                        Reiniciar Ecosistema
+                    </button>
+                </div>
+                
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">3. Obtén un análisis experto:</label>
+                    <button id="analyze-btn" class="w-full bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 shadow-lg">
+                        ✨ Analizar y Recomendar
+                    </button>
+                </div>
+
+                <div id="ecosystem-status" class="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
+                     <h3 class="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Estado del Ecosistema</h3>
+                     <p class="text-gray-600 dark:text-gray-400"><span class="font-bold">Mes simulado:</span> <span id="month-counter">0</span></p>
+                     <p class="text-gray-600 dark:text-gray-400"><span class="font-bold">Riqueza:</span> 20 Especies</p>
+                     <p class="text-gray-600 dark:text-gray-400"><span class="font-bold">Balance:</span> <span id="balance-status" class="font-semibold">Perfecto</span></p>
+                </div>
+            </div>
+
+            <!-- Columna de Visualización -->
+            <div class="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg">
+                <h2 class="text-2xl font-semibold mb-2 text-center text-gray-900 dark:text-white">Balance Actual de Población</h2>
+                <div class="relative h-80 md:h-96">
+                    <canvas id="doughnutChart"></canvas>
+                </div>
+                
+                <hr class="my-8 border-gray-200 dark:border-gray-700">
+
+                <h2 class="text-2xl font-semibold mb-2 text-center text-gray-900 dark:text-white">Evolución en el Tiempo</h2>
+                <p class="text-center text-sm text-gray-500 dark:text-gray-400 mb-4">Las áreas de colores representan la abundancia de cada especie. Haz clic en la leyenda para ocultarlas o mostrarlas.</p>
+                 <div class="relative h-80 md:h-96">
+                    <canvas id="lineChart"></canvas>
+                </div>
+            </div>
+        </main>
+        
+        <div class="mt-8 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">Detalles de las Especies (Haz clic para saber más)</h2>
+            <div id="species-details" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            </div>
+        </div>
+        
+        <footer class="text-center py-4 mt-8">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Desarrollado por Martin Vazquez, Chief Science Officer, Heritas</p>
+        </footer>
+    </div>
+    
+    <!-- Modal -->
+    <div id="modal-backdrop" class="modal-backdrop"></div>
+    <div id="modal-container" class="modal-container rounded-2xl shadow-2xl dark:bg-gray-800">
+        <div class="p-6">
+            <div class="flex justify-between items-start mb-4">
+                <h2 id="modal-title" class="text-2xl font-bold text-gray-900 dark:text-white"></h2>
+                <button id="close-modal-btn" class="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white transition text-3xl leading-none">&times;</button>
+            </div>
+            <div id="modal-content" class="prose prose-sm max-w-none text-gray-700 dark:text-gray-300">
+                <div id="loading-spinner" class="text-center p-8 hidden">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                    <p class="mt-4">Analizando... La IA está generando tus recomendaciones.</p>
+                </div>
+                <div id="modal-text-content"></div>
+                
+                <!-- New section for Meal Plan -->
+                <div id="meal-plan-section" class="mt-6 pt-4 border-t border-gray-300 dark:border-gray-700 hidden">
+                    <button id="generate-meal-plan-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300 transform hover:scale-105">
+                        ✨ Generar un plan de comidas de 1 día
+                    </button>
+                    <div id="meal-plan-loading-spinner" class="text-center p-4 hidden">
+                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto"></div>
+                        <p class="mt-2 text-sm">Creando un plan de comidas para ti...</p>
+                    </div>
+                    <div id="meal-plan-response" class="mt-4 prose prose-sm max-w-none"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Link to the external JavaScript file -->
+    <script src="script.js"></script>
+</body>
+</html>

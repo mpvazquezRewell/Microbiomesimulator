@@ -1,0 +1,16 @@
+# Netlify configuration file
+
+# Build settings
+[build]
+  # Directory containing the frontend files (index.html, script.js, etc.)
+  publish = "public"
+  # Directory containing the serverless functions
+  functions = "netlify/functions"
+
+# Redirect rule to make function URLs cleaner.
+# This makes it so a request to "/api/analyze" is automatically
+# forwarded to the ".netlify/functions/analyze" function.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200

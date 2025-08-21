@@ -1,0 +1,11 @@
+{
+  "name": "microbiome-simulator-netlify",
+  "version": "1.0.0",
+  "description": "A microbiome simulator with AI analysis, ready for Netlify deployment.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}
