@@ -53,7 +53,6 @@ const mealPlanSection = document.getElementById('meal-plan-section');
 const generateMealPlanBtn = document.getElementById('generate-meal-plan-btn');
 const mealPlanLoadingSpinner = document.getElementById('meal-plan-loading-spinner');
 const mealPlanResponse = document.getElementById('meal-plan-response');
-// Referencia al elemento de riqueza en index.html, asumo que existe o lo crearemos.
 const richnessCounter = document.getElementById('richness-counter'); 
 
 
@@ -89,7 +88,7 @@ function showSpeciesInfoModal(species) {
 function createDoughnutChart() {
     if (doughnutChart) doughnutChart.destroy();
     
-    // Filtrar especies con abundancia > 0 para el gráfico de dona
+    // Filtrar especies con abundancia > 0.05 para el gráfico de dona
     const activeSpecies = currentSpecies.filter(s => s.abundance > 0.05);
 
     doughnutChart = new Chart(doughnutCtx, {
@@ -207,7 +206,18 @@ function updateSpeciesDetails() {
 }
 
 function updateBalanceStatus() {
-    // Calcular la abundancia total de los grupos
+    // 1. Calcular Scores Biológicos
+    const fPrausnitzii = currentSpecies.find(s => s.name === 'Faecalibacterium prausnitzii')?.abundance || 0;
+    const roseburia = currentSpecies.find(s => s.name === 'Roseburia spp.')?.abundance || 0;
+    const bilophila = currentSpecies.find(s => s.name === 'Bilophila wadsworthia')?.abundance || 0;
+    const fusobacterium = currentSpecies.find(s => s.name === 'Fusobacterium nucleatum')?.abundance || 0;
+
+    // Score de AGCC (Butirato-productores) - Ideal alto
+    const agccScore = fPrausnitzii + roseburia; 
+    // Score de Inflamación - Ideal bajo
+    const inflammationScore = bilophila + fusobacterium; 
+
+    // 2. Determinar Balance General
     const totalBeneficial = currentSpecies
         .filter(s => s.type === 'beneficial')
         .reduce((sum, s) => sum + s.abundance, 0);
@@ -215,34 +225,28 @@ function updateBalanceStatus() {
     const totalOpportunistic = currentSpecies
         .filter(s => s.type === 'opportunistic')
         .reduce((sum, s) => sum + s.abundance, 0);
+        
+    const beneficialShare = totalBeneficial / (totalBeneficial + totalOpportunistic);
 
-    const beneficialVsOpportunisticRatio = totalBeneficial / totalOpportunistic;
-    
-    // Umbral de balance. Si es mucho mayor a 1, es beneficioso. Si es mucho menor a 1, es oportunista.
-    const perfectBalanceThreshold = 0.5; // Si la diferencia entre ambos es < 5% del total
-    const totalActive = totalBeneficial + totalOpportunistic;
-    const beneficialShare = totalBeneficial / totalActive;
-    const opportunisticShare = totalOpportunistic / totalActive;
-
-    if (Math.abs(beneficialShare - opportunisticShare) < 0.1) {
-        // Si la diferencia es menor al 10%
-        balanceStatus.textContent = 'Perfecto (Equilibrado)';
+    // 3. Aplicar Nuevos Estados de Balance
+    if (agccScore > 15 && inflammationScore < 5) {
+        balanceStatus.textContent = 'Perfecto (Alta Producción AGCC)';
         balanceStatus.className = 'font-semibold text-green-500';
-    } else if (beneficialShare > opportunisticShare) {
-        // Mayor proporción de Beneficiosas
+    } else if (beneficialShare >= 0.6) {
         balanceStatus.textContent = 'Balanceado a especies benéficas';
         balanceStatus.className = 'font-semibold text-blue-500';
+    } else if (beneficialShare > 0.4) {
+        balanceStatus.textContent = 'Neutro (Requiere Promoción)';
+        balanceStatus.className = 'font-semibold text-yellow-500';
     } else {
-        // Mayor proporción de Oportunistas
         balanceStatus.textContent = 'Desbalanceado a especies oportunistas';
         balanceStatus.className = 'font-semibold text-red-500';
     }
 }
 
 function updateRichness() {
+    // La riqueza es el conteo de especies con abundancia detectable (> 0.05%)
     const activeSpeciesCount = currentSpecies.filter(s => s.abundance > 0.05).length;
-    // Asumiendo que existe un elemento con id="richness-counter" en index.html, sino usaré la consola.
-    // Busco el elemento en el DOM para actualizarlo
     const richnessElement = document.getElementById('richness-counter');
     if (richnessElement) {
         richnessElement.textContent = `${activeSpeciesCount} Especies`;
@@ -250,9 +254,12 @@ function updateRichness() {
 }
 
 function updateAllUI() {
+    // Actualizar Doughnut Chart (solo especies activas)
     doughnutChart.data.datasets[0].data = currentSpecies.filter(s => s.abundance > 0.05).map(s => s.abundance);
     doughnutChart.data.labels = currentSpecies.filter(s => s.abundance > 0.05).map(s => `${s.emoji} ${s.name}`);
     doughnutChart.update();
+    
+    // Actualizar Line Chart
     const globalMax = getGlobalMaxAbundance();
     const yAxisMax = Math.max(10, Math.ceil((globalMax + 2) / 5) * 5); 
     if (lineChart.options.scales.y.max !== yAxisMax) {
@@ -263,9 +270,11 @@ function updateAllUI() {
         dataset.data = getHistoryForSpecies(index);
     });
     lineChart.update();
+    
+    // Actualizar detalles y estado
     updateSpeciesDetails();
     updateBalanceStatus();
-    updateRichness(); // Nueva llamada a la función de riqueza
+    updateRichness();
     monthCounter.textContent = month;
 }
 
@@ -273,124 +282,104 @@ function updateAllUI() {
 function simulateMonth() {
     month++;
     const diet = dietSelect.value;
-    let totalLoss = 0;
-    let totalGain = 0;
-
-    // Lógica para cada dieta
-    switch(diet) {
-        case 'industrialized':
-            totalLoss = 0;
-            currentSpecies.forEach(s => {
-                if (s.type === 'beneficial' && s.abundance > 0.5) {
-                    const loss = s.abundance * 0.15;
-                    s.abundance -= loss;
-                    totalLoss += loss;
-                }
-            });
-            const opportunisticSpecies = currentSpecies.filter(s => s.type === 'opportunistic');
-            const gainPerOpportunistic = totalLoss / opportunisticSpecies.length;
-            currentSpecies.forEach(s => {
-                if (s.type === 'opportunistic') s.abundance += gainPerOpportunistic;
-            });
-            break;
-        case 'mediterranean':
-            let gainFromDiet = 0;
-            let lossFromDiet = 0;
-
-            // 1. Aumento significativo de especies beneficiosas clave (Butirato/Fibra)
-            currentSpecies.forEach(s => {
-                let change = 0;
-                
-                // Productores TOP de Butirato y Descomponedores de Fibra
-                if (s.name === 'Faecalibacterium prausnitzii' || s.name === 'Roseburia spp.' || s.name === 'Prevotella copri') {
-                    change = s.abundance * 0.15 + 0.5; // Fuerte aumento
-                    s.abundance += change;
-                    gainFromDiet += change;
-                } 
-                // Otras Beneficiosas importantes
-                else if (s.name.includes('Bifido') || s.name === 'Akkermansia muciniphila' || s.name.includes('Lactobacillus') || s.name.includes('Ruminococcus') || s.name.includes('Bacteroides thetaiotaomicron')) {
-                    change = s.abundance * 0.08 + 0.2; // Aumento moderado
-                    s.abundance += change;
-                    gainFromDiet += change;
-                } 
-                // Oportunistas
-                else if (s.type === 'opportunistic' && s.abundance > 1) {
-                    let reduction = s.abundance * 0.10;
-                    if (s.name === 'Bilophila wadsworthia') { // Reducción especial por bajo consumo de grasa animal
-                        reduction = s.abundance * 0.20;
-                    }
-                    s.abundance = Math.max(0.1, s.abundance - reduction);
-                    lossFromDiet += reduction;
-                }
-                
-                // Añadir un poco de ruido para simular la variabilidad natural
-                s.abundance += (Math.random() - 0.5) * 0.1; 
-            });
-            
-            break;
-        case 'keto':
-            totalLoss = 0;
-            let fatLoverGain = 0;
-            currentSpecies.forEach(s => {
-                if ((s.name.includes('Bifido') || s.name.includes('Faecali') || s.name.includes('Roseburia') || s.name.includes('Prevotella')) && s.abundance > 0.5) {
-                    const loss = s.abundance * 0.25;
-                    s.abundance -= loss;
-                    totalLoss += loss;
-                }
-            });
-            currentSpecies.forEach(s => {
-                if (s.name.includes('Bilophila')) {
-                   const gain = totalLoss * 0.7;
-                   s.abundance += gain;
-                   fatLoverGain = gain;
-                }
-            });
-            const remainingGain = totalLoss - fatLoverGain;
-            const otherOpportunists = currentSpecies.filter(s => s.type === 'opportunistic' && !s.name.includes('Bilophila'));
-            const gainPerOther = remainingGain / otherOpportunists.length;
-            currentSpecies.forEach(s => {
-                if (s.type === 'opportunistic' && !s.name.includes('Bilophila')) s.abundance += gainPerOther;
-            });
-            break;
-        case 'vegan':
-            totalGain = 0;
-            currentSpecies.forEach(s => {
-                if (s.type === 'beneficial' && (s.name.includes('Prevotella') || s.name.includes('Bifido'))) {
-                    const gain = s.abundance * 0.20;
-                    s.abundance += gain;
-                    totalGain += gain;
-                }
-            });
-            const opportunistsToReduce = currentSpecies.filter(s => s.name.includes('Bilophila') || s.name.includes('Clostridium perfringens'));
-            const lossPerOpportunist = totalGain / opportunistsToReduce.length;
-            currentSpecies.forEach(s => {
-                 if ((s.name.includes('Bilophila') || s.name.includes('Clostridium perfringens')) && s.abundance > 0.5) {
-                    s.abundance = Math.max(0.1, s.abundance - lossPerOpportunist);
-                 }
-            });
-            break;
-    }
+    const newAbundances = JSON.parse(JSON.stringify(currentSpecies)); // Copia profunda para trabajar con cambios
     
-    // 1. Lógica de "Extinción" / Indetección: si la especie cae por debajo del 0.5%, establecer a 0.
-    currentSpecies.forEach(s => {
-        if (s.abundance < 0.5) {
-            s.abundance = 0;
+    // 1. Calcular Factores Biológicos Cruzados (antes de aplicar la dieta)
+    const fPrausnitziiAb = newAbundances.find(s => s.name === 'Faecalibacterium prausnitzii').abundance;
+    const roseburiaAb = newAbundances.find(s => s.name === 'Roseburia spp.').abundance;
+    const prevotellaAb = newAbundances.find(s => s.name === 'Prevotella copri').abundance;
+    const bacteroidesAb = newAbundances.find(s => s.name === 'Bacteroides thetaiotaomicron').abundance;
+    const akkermansia = newAbundances.find(s => s.name === 'Akkermansia muciniphila');
+    const methanobrevibacter = newAbundances.find(s => s.name === 'Methanobrevibacter smithii');
+    
+    // Factor de Estabilidad del Butirato (aplica a Akkermansia)
+    const butyratoFactor = (fPrausnitziiAb + roseburiaAb) / 100;
+    
+    // Factor de Hidrógeno para Metanógenos (Prevotella y Butirato-productores son buenos)
+    const hydrogenFactor = (prevotellaAb + fPrausnitziiAb + roseburiaAb) / 300; 
+
+    // 2. Aplicar Dinámica Cruzada
+    // Cooperación: Butirato ayuda a Akkermansia (moco).
+    akkermansia.abundance += butyratoFactor * 0.5; // Ligero boost de butirato
+    
+    // Sintrofía: Metanógeno crece si hay Hidrógeno
+    methanobrevibacter.abundance += hydrogenFactor * 0.8; 
+    
+    // Competencia: Prevotella vs. Bacteroides por Carbohidratos (ajuste negativo a Prevotella si Bacteroides domina)
+    const carbCompetition = (bacteroidesAb - prevotellaAb) / 50; 
+    if (carbCompetition > 0.5) { // Solo si Bacteroides es significativamente mayor
+        newAbundances.find(s => s.name === 'Prevotella copri').abundance -= carbCompetition * 0.2;
+    }
+
+
+    // 3. Aplicar Efectos de Dieta y Metabolitos
+    newAbundances.forEach(s => {
+        let change = 0;
+        let baseChange = (s.abundance / 100) * 0.1; // Tasa de crecimiento base del 10%
+        let factor = 1;
+
+        switch(diet) {
+            case 'industrialized':
+                if (s.type === 'beneficial') { factor = -0.15; } // Reducción de fibra
+                if (s.name === 'Akkermansia muciniphila') { factor = -0.25; } // Debilitamiento capa moco por inflamación
+                if (s.name.includes('Enterococcus faecalis')) { factor = 0.3; } // Alto azúcar/Inflamación
+                if (s.name.includes('Bilophila wadsworthia')) { factor = 0.4; } // Grasa animal/Colina
+                break;
+
+            case 'mediterranean':
+                if (s.name === 'Faecalibacterium prausnitzii' || s.name === 'Roseburia spp.' || s.name === 'Prevotella copri') { factor = 0.35; } // Alto Butirato/Fibra
+                else if (s.type === 'beneficial') { factor = 0.1; }
+                
+                // Polifenoles: fuerte inhibición de patógenos
+                if (s.name === 'Fusobacterium nucleatum' || s.name === 'Clostridioides difficile') { factor = -0.3; }
+                if (s.name === 'Bilophila wadsworthia') { factor = -0.4; } // Bajo consumo de grasa animal
+                break;
+
+            case 'keto':
+                if (s.name.includes('Bifido') || s.name.includes('Faecali') || s.name.includes('Roseburia') || s.name.includes('Prevotella')) { factor = -0.3; } // Falta de carbohidratos
+                if (s.name.includes('Bilophila wadsworthia')) { factor = 0.6; } // Crecimiento por ácidos biliares
+                if (s.type === 'opportunistic' && s.name !== 'Bilophila wadsworthia') { factor = 0.1; } // Aumento general de oportunistas por disbiosis
+                break;
+
+            case 'vegan':
+                if (s.name === 'Prevotella copri' || s.name.includes('Ruminococcus') || s.name.includes('Bifido')) { factor = 0.3; } // Alta fibra
+                else if (s.type === 'beneficial') { factor = 0.15; }
+                if (s.name === 'Bilophila wadsworthia' || s.name === 'Clostridium perfringens') { factor = -0.25; } // Falta de grasa animal
+                // Añadimos un pequeño boost a la riqueza general (diversidad de fibra)
+                if (s.type === 'neutral') { factor = 0.05; }
+                break;
         }
+
+        change = baseChange * factor * 10; // Multiplicador para hacer el cambio más visible
+        s.abundance += change;
+        
+        // Ruido aleatorio para simular variabilidad
+        s.abundance += (Math.random() - 0.5) * 0.2; 
     });
 
-    // 2. Reescalar todas las especies que tienen abundancia > 0 para que el total sea 100%
-    const activeSpecies = currentSpecies.filter(s => s.abundance > 0);
+    // 4. Aplicar Lógica de Extinción (Abundancia < 0.5%)
+    newAbundances.forEach(s => {
+        if (s.abundance < 0.5) {
+            s.abundance = 0; // Se considera indetectable/perdida
+        }
+        // Asegurar que ninguna especie sea negativa
+        s.abundance = Math.max(0, s.abundance);
+    });
+    
+    // 5. Normalización Global
+    const activeSpecies = newAbundances.filter(s => s.abundance > 0);
     const totalAbundance = activeSpecies.reduce((sum, s) => sum + s.abundance, 0);
     
     if (totalAbundance > 0) {
         const scaleFactor = 100 / totalAbundance;
-        currentSpecies.forEach(s => {
+        newAbundances.forEach(s => {
             if (s.abundance > 0) {
-                s.abundance = s.abundance * scaleFactor; 
+                s.abundance *= scaleFactor; 
             }
         });
     }
 
+    currentSpecies = newAbundances;
     recordHistory();
     updateAllUI();
 }
@@ -453,6 +442,7 @@ async function callGeminiForAnalysis() {
         if (!response.ok) {
             const errorText = await response.text();
             throw new Error(`Error del servidor: ${errorText}`);
+            console.error(`Error del servidor: ${errorText}`);
         }
 
         const result = await response.json();
