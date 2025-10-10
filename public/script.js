@@ -53,6 +53,9 @@ const mealPlanSection = document.getElementById('meal-plan-section');
 const generateMealPlanBtn = document.getElementById('generate-meal-plan-btn');
 const mealPlanLoadingSpinner = document.getElementById('meal-plan-loading-spinner');
 const mealPlanResponse = document.getElementById('meal-plan-response');
+// Referencia al elemento de riqueza en index.html, asumo que existe o lo crearemos.
+const richnessCounter = document.getElementById('richness-counter'); 
+
 
 // --- MODAL FUNCTIONS ---
 function openModal() {
@@ -70,7 +73,12 @@ function closeModal() {
 
 function showSpeciesInfoModal(species) {
     modalTitle.innerHTML = `${species.emoji} ${species.name}`;
-    modalTextContent.innerHTML = `<p class="text-lg">${species.description}</p>`;
+    // Si la abundancia es 0, no mostrar la descripción.
+    const abundanceText = species.abundance.toFixed(1) > 0.05 
+        ? `<p class="text-lg">${species.description}</p>`
+        : `<p class="text-lg text-red-500">Esta especie está por debajo del umbral de detección (0.5%) y ha sido considerada perdida del ecosistema.</p>`;
+        
+    modalTextContent.innerHTML = abundanceText;
     loadingSpinner.classList.add('hidden');
     modalTextContent.classList.remove('hidden');
     mealPlanSection.classList.add('hidden');
@@ -80,14 +88,18 @@ function showSpeciesInfoModal(species) {
 // --- CHARTING FUNCTIONS ---
 function createDoughnutChart() {
     if (doughnutChart) doughnutChart.destroy();
+    
+    // Filtrar especies con abundancia > 0 para el gráfico de dona
+    const activeSpecies = currentSpecies.filter(s => s.abundance > 0.05);
+
     doughnutChart = new Chart(doughnutCtx, {
         type: 'doughnut',
         data: {
-            labels: currentSpecies.map(s => `${s.emoji} ${s.name}`),
+            labels: activeSpecies.map(s => `${s.emoji} ${s.name}`),
             datasets: [{
-                data: currentSpecies.map(s => s.abundance),
-                backgroundColor: currentSpecies.map(s => s.color.replace('1)', '0.8)')),
-                borderColor: currentSpecies.map(s => s.color),
+                data: activeSpecies.map(s => s.abundance),
+                backgroundColor: activeSpecies.map(s => s.color.replace('1)', '0.8)')),
+                borderColor: activeSpecies.map(s => s.color),
                 borderWidth: 1
             }]
         },
@@ -168,16 +180,25 @@ function createLineChart() {
 function updateSpeciesDetails() {
     speciesDetailsContainer.innerHTML = '';
     currentSpecies.forEach(species => {
+        // Ocultar especies que están a 0%
+        if (species.abundance < 0.05) return; 
+
         const card = document.createElement('div');
         card.className = 'species-card flex-grow bg-gray-50 dark:bg-gray-700 p-3 rounded-lg shadow-sm';
         card.addEventListener('click', () => showSpeciesInfoModal(species));
+        
+        // Estilo especial si la abundancia es muy baja pero no cero (entre 0.05 y 0.5)
+        const abundanceColor = species.abundance < 0.5 
+            ? 'text-yellow-500' 
+            : `style="color:${species.color}"`;
+
         card.innerHTML = `
             <div class="flex items-center">
                 <span class="text-3xl mr-3">${species.emoji}</span>
                 <div>
                     <h4 class="font-semibold text-sm text-gray-800 dark:text-gray-100">${species.name}</h4>
                     <p class="text-xs text-gray-500 dark:text-gray-400">${species.role}</p>
-                    <p class="font-bold text-lg" style="color:${species.color}">${species.abundance.toFixed(1)}%</p>
+                    <p class="font-bold text-lg ${abundanceColor}">${species.abundance.toFixed(1)}%</p>
                 </div>
             </div>
         `;
@@ -186,23 +207,51 @@ function updateSpeciesDetails() {
 }
 
 function updateBalanceStatus() {
-    const abundances = currentSpecies.map(s => s.abundance);
-    const maxAbundance = Math.max(...abundances);
-    const minAbundance = Math.min(...abundances);
-    if (maxAbundance - minAbundance < 5) {
-        balanceStatus.textContent = 'Perfecto';
+    // Calcular la abundancia total de los grupos
+    const totalBeneficial = currentSpecies
+        .filter(s => s.type === 'beneficial')
+        .reduce((sum, s) => sum + s.abundance, 0);
+
+    const totalOpportunistic = currentSpecies
+        .filter(s => s.type === 'opportunistic')
+        .reduce((sum, s) => sum + s.abundance, 0);
+
+    const beneficialVsOpportunisticRatio = totalBeneficial / totalOpportunistic;
+    
+    // Umbral de balance. Si es mucho mayor a 1, es beneficioso. Si es mucho menor a 1, es oportunista.
+    const perfectBalanceThreshold = 0.5; // Si la diferencia entre ambos es < 5% del total
+    const totalActive = totalBeneficial + totalOpportunistic;
+    const beneficialShare = totalBeneficial / totalActive;
+    const opportunisticShare = totalOpportunistic / totalActive;
+
+    if (Math.abs(beneficialShare - opportunisticShare) < 0.1) {
+        // Si la diferencia es menor al 10%
+        balanceStatus.textContent = 'Perfecto (Equilibrado)';
         balanceStatus.className = 'font-semibold text-green-500';
-    } else if (maxAbundance - minAbundance < 15) {
-        balanceStatus.textContent = 'Alterado';
-        balanceStatus.className = 'font-semibold text-yellow-500';
+    } else if (beneficialShare > opportunisticShare) {
+        // Mayor proporción de Beneficiosas
+        balanceStatus.textContent = 'Balanceado a especies benéficas';
+        balanceStatus.className = 'font-semibold text-blue-500';
     } else {
-        balanceStatus.textContent = 'Muy Desbalanceado';
+        // Mayor proporción de Oportunistas
+        balanceStatus.textContent = 'Desbalanceado a especies oportunistas';
         balanceStatus.className = 'font-semibold text-red-500';
     }
 }
 
+function updateRichness() {
+    const activeSpeciesCount = currentSpecies.filter(s => s.abundance > 0.05).length;
+    // Asumiendo que existe un elemento con id="richness-counter" en index.html, sino usaré la consola.
+    // Busco el elemento en el DOM para actualizarlo
+    const richnessElement = document.getElementById('richness-counter');
+    if (richnessElement) {
+        richnessElement.textContent = `${activeSpeciesCount} Especies`;
+    }
+}
+
 function updateAllUI() {
-    doughnutChart.data.datasets[0].data = currentSpecies.map(s => s.abundance);
+    doughnutChart.data.datasets[0].data = currentSpecies.filter(s => s.abundance > 0.05).map(s => s.abundance);
+    doughnutChart.data.labels = currentSpecies.filter(s => s.abundance > 0.05).map(s => `${s.emoji} ${s.name}`);
     doughnutChart.update();
     const globalMax = getGlobalMaxAbundance();
     const yAxisMax = Math.max(10, Math.ceil((globalMax + 2) / 5) * 5); 
@@ -216,6 +265,7 @@ function updateAllUI() {
     lineChart.update();
     updateSpeciesDetails();
     updateBalanceStatus();
+    updateRichness(); // Nueva llamada a la función de riqueza
     monthCounter.textContent = month;
 }
 
@@ -244,7 +294,6 @@ function simulateMonth() {
             });
             break;
         case 'mediterranean':
-            // NUEVA LÓGICA BASADA EN EVIDENCIA CIENTÍFICA
             let gainFromDiet = 0;
             let lossFromDiet = 0;
 
@@ -277,10 +326,6 @@ function simulateMonth() {
                 // Añadir un poco de ruido para simular la variabilidad natural
                 s.abundance += (Math.random() - 0.5) * 0.1; 
             });
-            
-            // Asegurar que las ganancias y pérdidas se equilibren para mantener el total en 100%
-            // El reescalado global al final se encargará de esto, pero ajustamos el totalLoss para 
-            // que el reescalado sea menos dramático si hubo una ganancia neta.
             
             break;
         case 'keto':
@@ -326,17 +371,25 @@ function simulateMonth() {
             break;
     }
     
-    // 2. Reescalar todas las especies para que el total sea 100%
-    const totalAbundance = currentSpecies.reduce((sum, s) => sum + s.abundance, 0);
-    const scaleFactor = 100 / totalAbundance;
+    // 1. Lógica de "Extinción" / Indetección: si la especie cae por debajo del 0.5%, establecer a 0.
     currentSpecies.forEach(s => {
-        s.abundance = Math.max(0.1, s.abundance * scaleFactor); // Mínimo de 0.1% para evitar la extinción total
+        if (s.abundance < 0.5) {
+            s.abundance = 0;
+        }
     });
+
+    // 2. Reescalar todas las especies que tienen abundancia > 0 para que el total sea 100%
+    const activeSpecies = currentSpecies.filter(s => s.abundance > 0);
+    const totalAbundance = activeSpecies.reduce((sum, s) => sum + s.abundance, 0);
     
-    // Una verificación final de normalización (debería ser innecesaria pero asegura el 100%)
-    const finalTotalAbundance = currentSpecies.reduce((sum, s) => sum + s.abundance, 0);
-    const finalScaleFactor = 100 / finalTotalAbundance;
-    currentSpecies.forEach(s => s.abundance *= finalScaleFactor);
+    if (totalAbundance > 0) {
+        const scaleFactor = 100 / totalAbundance;
+        currentSpecies.forEach(s => {
+            if (s.abundance > 0) {
+                s.abundance = s.abundance * scaleFactor; 
+            }
+        });
+    }
 
     recordHistory();
     updateAllUI();
@@ -390,7 +443,9 @@ async function callGeminiForAnalysis() {
     mealPlanResponse.innerHTML = '';
     openModal();
 
-    const speciesDataString = currentSpecies.map(s => `- ${s.name} (${s.role}): ${s.abundance.toFixed(1)}%`).join('\n');
+    // Solo incluimos especies con abundancia detectable (> 0) en el prompt de IA
+    const activeSpeciesData = currentSpecies.filter(s => s.abundance > 0);
+    const speciesDataString = activeSpeciesData.map(s => `- ${s.name} (${s.role}): ${s.abundance.toFixed(1)}%`).join('\n');
 
     try {
         const response = await postToFunction('analyze', { speciesData: speciesDataString });
