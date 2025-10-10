@@ -217,7 +217,7 @@ function updateBalanceStatus() {
     // Score de Inflamación - Ideal bajo
     const inflammationScore = bilophila + fusobacterium; 
 
-    // 2. Determinar Balance General
+    // 2. Determinar Balance General y Dominancia
     const totalBeneficial = currentSpecies
         .filter(s => s.type === 'beneficial')
         .reduce((sum, s) => sum + s.abundance, 0);
@@ -227,20 +227,49 @@ function updateBalanceStatus() {
         .reduce((sum, s) => sum + s.abundance, 0);
         
     const beneficialShare = totalBeneficial / (totalBeneficial + totalOpportunistic);
+    
+    // Riqueza (para check de biodiversidad)
+    const activeSpeciesCount = currentSpecies.filter(s => s.abundance > 0.05).length;
+    
+    // Dominancia: Abundancia de la especie más dominante
+    const maxAbundance = currentSpecies.reduce((max, s) => Math.max(max, s.abundance), 0);
+    const dominantSpecies = currentSpecies.find(s => s.abundance === maxAbundance);
 
-    // 3. Aplicar Nuevos Estados de Balance
-    if (agccScore > 15 && inflammationScore < 5) {
-        balanceStatus.textContent = 'Perfecto (Alta Producción AGCC)';
-        balanceStatus.className = 'font-semibold text-green-500';
-    } else if (beneficialShare >= 0.6) {
-        balanceStatus.textContent = 'Balanceado a especies benéficas';
-        balanceStatus.className = 'font-semibold text-blue-500';
-    } else if (beneficialShare > 0.4) {
-        balanceStatus.textContent = 'Neutro (Requiere Promoción)';
-        balanceStatus.className = 'font-semibold text-yellow-500';
-    } else {
-        balanceStatus.textContent = 'Desbalanceado a especies oportunistas';
+    // 3. Aplicar Nuevos Estados de Balance (Priorizando alertas)
+    
+    // Alerta de Dominancia (Monocultura)
+    if (maxAbundance >= 25) {
+        balanceStatus.textContent = `⚠️ Dominancia Extrema: ${dominantSpecies.emoji} ${dominantSpecies.name}`;
+        balanceStatus.className = 'font-semibold text-red-600 dark:text-red-400 animate-pulse';
+        return;
+    }
+    
+    // Alerta de Pérdida de Riqueza
+    if (activeSpeciesCount <= 15) {
+        balanceStatus.textContent = '🔻 Riqueza Críticamente Baja';
+        balanceStatus.className = 'font-semibold text-orange-500';
+        // Si el estado es peor que 'Neutro', se mantiene la alerta.
+    }
+    
+    // Alerta de Desbalance Oportunista
+    if (beneficialShare < 0.4 || inflammationScore > 10) {
+        balanceStatus.textContent = '❌ Desbalanceado a especies oportunistas';
         balanceStatus.className = 'font-semibold text-red-500';
+    } 
+    // Estado Óptimo
+    else if (agccScore > 15 && inflammationScore < 5 && activeSpeciesCount > 18) {
+        balanceStatus.textContent = '✅ Perfecto (Alta Producción AGCC y Riqueza)';
+        balanceStatus.className = 'font-semibold text-green-500';
+    } 
+    // Estado Positivo
+    else if (beneficialShare >= 0.6) {
+        balanceStatus.textContent = '📈 Balanceado a especies benéficas';
+        balanceStatus.className = 'font-semibold text-blue-500';
+    } 
+    // Estado Neutro (Por defecto si no hay alertas graves)
+    else {
+        balanceStatus.textContent = '🟡 Neutro (Requiere Promoción)';
+        balanceStatus.className = 'font-semibold text-yellow-500';
     }
 }
 
@@ -351,12 +380,12 @@ function simulateMonth() {
                 break;
         }
 
-        // NUEVO CÁLCULO DE CAMBIO: Multiplicador directo de la abundancia
+        // CÁLCULO DE CAMBIO: Multiplicador directo de la abundancia
         change = s.abundance * factor; 
         s.abundance += change;
         
         // Ruido aleatorio para simular variabilidad
-        s.abundance += (Math.random() - 0.5) * 0.5; // Aumentamos la magnitud del ruido
+        s.abundance += (Math.random() - 0.5) * 0.5; 
     });
 
     // 4. Aplicar Lógica de Extinción (Abundancia < 0.5%)
@@ -377,13 +406,11 @@ function simulateMonth() {
     const totalAbundance = activeSpecies.reduce((sum, s) => sum + s.abundance, 0);
     
     if (totalAbundance > 0) {
-        const scaleFactor = 100 / totalAbundance;
         currentSpecies = newAbundances.map(s => ({
             ...s,
-            abundance: s.abundance > 0 ? s.abundance * scaleFactor : 0,
+            abundance: s.abundance > 0 ? s.abundance * (100 / totalAbundance) : 0,
         }));
     } else {
-         // Si todas las especies se extinguieron, reiniciamos o manejamos el error (en este caso, mantendremos el estado)
         currentSpecies = newAbundances;
     }
 
