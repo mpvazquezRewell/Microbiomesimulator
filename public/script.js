@@ -319,6 +319,22 @@ function getGlobalMaxAbundance() {
 }
 
 // --- API CALLS TO OUR BACKEND ---
+async function postToFunction(functionName, payload) {
+    const requestOptions = {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    };
+
+    let response = await fetch(`/.netlify/functions/${functionName}`, requestOptions);
+
+    if (response.status === 404) {
+        response = await fetch(`/api/${functionName}`, requestOptions);
+    }
+
+    return response;
+}
+
 async function callGeminiForAnalysis() {
     modalTitle.innerText = "✨ Análisis del Microbioma por IA";
     modalTextContent.innerHTML = '';
@@ -331,12 +347,7 @@ async function callGeminiForAnalysis() {
     const speciesDataString = currentSpecies.map(s => `- ${s.name} (${s.role}): ${s.abundance.toFixed(1)}%`).join('\n');
 
     try {
-        // Call our own backend function
-        const response = await fetch('/api/analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ speciesData: speciesDataString })
-        });
+        const response = await postToFunction('analyze', { speciesData: speciesDataString });
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -354,7 +365,7 @@ async function callGeminiForAnalysis() {
         }
     } catch (error) {
         console.error("Error al llamar al backend:", error);
-        modalTextContent.innerHTML = `<p class="text-red-500">Ocurrió un error al contactar al servicio de análisis: ${error.message}</p>`;
+        modalTextContent.textContent = `Ocurrió un error al contactar al servicio de análisis: ${error.message}`;
     } finally {
         loadingSpinner.classList.add('hidden');
         modalTextContent.classList.remove('hidden');
@@ -366,12 +377,7 @@ async function callGeminiForMealPlan() {
     generateMealPlanBtn.disabled = true;
 
     try {
-        // Call our own backend function for the meal plan
-        const response = await fetch('/api/meal-plan', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ lastAnalysis: lastAnalysisResult })
-        });
+        const response = await postToFunction('meal-plan', { lastAnalysis: lastAnalysisResult });
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -384,11 +390,11 @@ async function callGeminiForMealPlan() {
             const markdownText = result.candidates[0].content.parts[0].text;
             mealPlanResponse.innerHTML = markdownConverter.makeHtml(markdownText);
         } else {
-            mealPlanResponse.innerHTML = "<p>No se pudo generar el plan de comidas.</p>";
+            mealPlanResponse.textContent = "No se pudo generar el plan de comidas.";
         }
     } catch (error) {
         console.error("Error al generar el plan de comidas:", error);
-        mealPlanResponse.innerHTML = `<p class="text-red-500">Ocurrió un error: ${error.message}</p>`;
+        mealPlanResponse.textContent = `Ocurrió un error: ${error.message}`;
     } finally {
         mealPlanLoadingSpinner.classList.add('hidden');
         generateMealPlanBtn.disabled = false;
