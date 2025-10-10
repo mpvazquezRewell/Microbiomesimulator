@@ -282,7 +282,8 @@ function updateAllUI() {
 function simulateMonth() {
     month++;
     const diet = dietSelect.value;
-    const newAbundances = JSON.parse(JSON.stringify(currentSpecies)); // Copia profunda para trabajar con cambios
+    // Usamos una copia de los valores actuales para calcular los cambios del mes
+    const newAbundances = JSON.parse(JSON.stringify(currentSpecies)); 
     
     // 1. Calcular Factores Biológicos Cruzados (antes de aplicar la dieta)
     const fPrausnitziiAb = newAbundances.find(s => s.name === 'Faecalibacterium prausnitzii').abundance;
@@ -293,77 +294,82 @@ function simulateMonth() {
     const methanobrevibacter = newAbundances.find(s => s.name === 'Methanobrevibacter smithii');
     
     // Factor de Estabilidad del Butirato (aplica a Akkermansia)
-    const butyratoFactor = (fPrausnitziiAb + roseburiaAb) / 100;
+    // Aumentamos el factor para que tenga más impacto
+    const butyratoFactor = (fPrausnitziiAb + roseburiaAb) / 50; 
     
     // Factor de Hidrógeno para Metanógenos (Prevotella y Butirato-productores son buenos)
-    const hydrogenFactor = (prevotellaAb + fPrausnitziiAb + roseburiaAb) / 300; 
+    // Aumentamos el factor para que tenga más impacto
+    const hydrogenFactor = (prevotellaAb + fPrausnitziiAb + roseburiaAb) / 100; 
 
     // 2. Aplicar Dinámica Cruzada
     // Cooperación: Butirato ayuda a Akkermansia (moco).
-    akkermansia.abundance += butyratoFactor * 0.5; // Ligero boost de butirato
+    akkermansia.abundance += butyratoFactor * 1.5; // Mayor boost de butirato
     
     // Sintrofía: Metanógeno crece si hay Hidrógeno
-    methanobrevibacter.abundance += hydrogenFactor * 0.8; 
+    methanobrevibacter.abundance += hydrogenFactor * 1.5; // Mayor boost
     
     // Competencia: Prevotella vs. Bacteroides por Carbohidratos (ajuste negativo a Prevotella si Bacteroides domina)
     const carbCompetition = (bacteroidesAb - prevotellaAb) / 50; 
     if (carbCompetition > 0.5) { // Solo si Bacteroides es significativamente mayor
-        newAbundances.find(s => s.name === 'Prevotella copri').abundance -= carbCompetition * 0.2;
+        newAbundances.find(s => s.name === 'Prevotella copri').abundance -= carbCompetition * 0.5;
     }
 
 
     // 3. Aplicar Efectos de Dieta y Metabolitos
     newAbundances.forEach(s => {
         let change = 0;
-        let baseChange = (s.abundance / 100) * 0.1; // Tasa de crecimiento base del 10%
-        let factor = 1;
+        let factor = 0; // El factor será el porcentaje de cambio (e.g., 0.15 = 15% de cambio)
 
         switch(diet) {
             case 'industrialized':
-                if (s.type === 'beneficial') { factor = -0.15; } // Reducción de fibra
-                if (s.name === 'Akkermansia muciniphila') { factor = -0.25; } // Debilitamiento capa moco por inflamación
-                if (s.name.includes('Enterococcus faecalis')) { factor = 0.3; } // Alto azúcar/Inflamación
-                if (s.name.includes('Bilophila wadsworthia')) { factor = 0.4; } // Grasa animal/Colina
+                if (s.type === 'beneficial') { factor = -0.15; } 
+                if (s.name === 'Akkermansia muciniphila') { factor = -0.25; } 
+                if (s.name.includes('Enterococcus faecalis')) { factor = 0.3; } 
+                if (s.name.includes('Bilophila wadsworthia')) { factor = 0.4; } 
                 break;
 
             case 'mediterranean':
-                if (s.name === 'Faecalibacterium prausnitzii' || s.name === 'Roseburia spp.' || s.name === 'Prevotella copri') { factor = 0.35; } // Alto Butirato/Fibra
-                else if (s.type === 'beneficial') { factor = 0.1; }
+                if (s.name === 'Faecalibacterium prausnitzii' || s.name === 'Roseburia spp.' || s.name === 'Prevotella copri') { factor = 0.35; } 
+                else if (s.type === 'beneficial') { factor = 0.15; }
                 
                 // Polifenoles: fuerte inhibición de patógenos
                 if (s.name === 'Fusobacterium nucleatum' || s.name === 'Clostridioides difficile') { factor = -0.3; }
-                if (s.name === 'Bilophila wadsworthia') { factor = -0.4; } // Bajo consumo de grasa animal
+                if (s.name === 'Bilophila wadsworthia') { factor = -0.4; } 
                 break;
 
             case 'keto':
-                if (s.name.includes('Bifido') || s.name.includes('Faecali') || s.name.includes('Roseburia') || s.name.includes('Prevotella')) { factor = -0.3; } // Falta de carbohidratos
-                if (s.name.includes('Bilophila wadsworthia')) { factor = 0.6; } // Crecimiento por ácidos biliares
-                if (s.type === 'opportunistic' && s.name !== 'Bilophila wadsworthia') { factor = 0.1; } // Aumento general de oportunistas por disbiosis
+                if (s.name.includes('Bifido') || s.name.includes('Faecali') || s.name.includes('Roseburia') || s.name.includes('Prevotella')) { factor = -0.3; } 
+                if (s.name.includes('Bilophila wadsworthia')) { factor = 0.6; } 
+                if (s.type === 'opportunistic' && s.name !== 'Bilophila wadsworthia') { factor = 0.1; } 
                 break;
 
             case 'vegan':
-                if (s.name === 'Prevotella copri' || s.name.includes('Ruminococcus') || s.name.includes('Bifido')) { factor = 0.3; } // Alta fibra
+                if (s.name === 'Prevotella copri' || s.name.includes('Ruminococcus') || s.name.includes('Bifido')) { factor = 0.3; } 
                 else if (s.type === 'beneficial') { factor = 0.15; }
-                if (s.name === 'Bilophila wadsworthia' || s.name === 'Clostridium perfringens') { factor = -0.25; } // Falta de grasa animal
-                // Añadimos un pequeño boost a la riqueza general (diversidad de fibra)
+                if (s.name === 'Bilophila wadsworthia' || s.name === 'Clostridium perfringens') { factor = -0.25; } 
                 if (s.type === 'neutral') { factor = 0.05; }
                 break;
         }
 
-        change = baseChange * factor * 10; // Multiplicador para hacer el cambio más visible
+        // NUEVO CÁLCULO DE CAMBIO: Multiplicador directo de la abundancia
+        change = s.abundance * factor; 
         s.abundance += change;
         
         // Ruido aleatorio para simular variabilidad
-        s.abundance += (Math.random() - 0.5) * 0.2; 
+        s.abundance += (Math.random() - 0.5) * 0.5; // Aumentamos la magnitud del ruido
     });
 
     // 4. Aplicar Lógica de Extinción (Abundancia < 0.5%)
     newAbundances.forEach(s => {
-        if (s.abundance < 0.5) {
-            s.abundance = 0; // Se considera indetectable/perdida
-        }
         // Asegurar que ninguna especie sea negativa
         s.abundance = Math.max(0, s.abundance);
+
+        if (s.abundance > 0 && s.abundance < 0.5) {
+            // Aplicar una pequeña probabilidad de "extinción" si están en el umbral bajo
+             if (Math.random() < 0.1) { // 10% de probabilidad de extinción en el umbral
+                 s.abundance = 0;
+             }
+        }
     });
     
     // 5. Normalización Global
@@ -372,14 +378,15 @@ function simulateMonth() {
     
     if (totalAbundance > 0) {
         const scaleFactor = 100 / totalAbundance;
-        newAbundances.forEach(s => {
-            if (s.abundance > 0) {
-                s.abundance *= scaleFactor; 
-            }
-        });
+        currentSpecies = newAbundances.map(s => ({
+            ...s,
+            abundance: s.abundance > 0 ? s.abundance * scaleFactor : 0,
+        }));
+    } else {
+         // Si todas las especies se extinguieron, reiniciamos o manejamos el error (en este caso, mantendremos el estado)
+        currentSpecies = newAbundances;
     }
 
-    currentSpecies = newAbundances;
     recordHistory();
     updateAllUI();
 }
