@@ -223,7 +223,10 @@ function updateAllUI() {
 function simulateMonth() {
     month++;
     const diet = dietSelect.value;
-    let totalLoss, totalGain;
+    let totalLoss = 0;
+    let totalGain = 0;
+
+    // Lógica para cada dieta
     switch(diet) {
         case 'industrialized':
             totalLoss = 0;
@@ -241,10 +244,44 @@ function simulateMonth() {
             });
             break;
         case 'mediterranean':
-            const average = 5;
+            // NUEVA LÓGICA BASADA EN EVIDENCIA CIENTÍFICA
+            let gainFromDiet = 0;
+            let lossFromDiet = 0;
+
+            // 1. Aumento significativo de especies beneficiosas clave (Butirato/Fibra)
             currentSpecies.forEach(s => {
-                s.abundance += (average - s.abundance) * 0.1 + (Math.random() - 0.5) * 0.2;
+                let change = 0;
+                
+                // Productores TOP de Butirato y Descomponedores de Fibra
+                if (s.name === 'Faecalibacterium prausnitzii' || s.name === 'Roseburia spp.' || s.name === 'Prevotella copri') {
+                    change = s.abundance * 0.15 + 0.5; // Fuerte aumento
+                    s.abundance += change;
+                    gainFromDiet += change;
+                } 
+                // Otras Beneficiosas importantes
+                else if (s.name.includes('Bifido') || s.name === 'Akkermansia muciniphila' || s.name.includes('Lactobacillus') || s.name.includes('Ruminococcus') || s.name.includes('Bacteroides thetaiotaomicron')) {
+                    change = s.abundance * 0.08 + 0.2; // Aumento moderado
+                    s.abundance += change;
+                    gainFromDiet += change;
+                } 
+                // Oportunistas
+                else if (s.type === 'opportunistic' && s.abundance > 1) {
+                    let reduction = s.abundance * 0.10;
+                    if (s.name === 'Bilophila wadsworthia') { // Reducción especial por bajo consumo de grasa animal
+                        reduction = s.abundance * 0.20;
+                    }
+                    s.abundance = Math.max(0.1, s.abundance - reduction);
+                    lossFromDiet += reduction;
+                }
+                
+                // Añadir un poco de ruido para simular la variabilidad natural
+                s.abundance += (Math.random() - 0.5) * 0.1; 
             });
+            
+            // Asegurar que las ganancias y pérdidas se equilibren para mantener el total en 100%
+            // El reescalado global al final se encargará de esto, pero ajustamos el totalLoss para 
+            // que el reescalado sea menos dramático si hubo una ganancia neta.
+            
             break;
         case 'keto':
             totalLoss = 0;
@@ -283,19 +320,24 @@ function simulateMonth() {
             const lossPerOpportunist = totalGain / opportunistsToReduce.length;
             currentSpecies.forEach(s => {
                  if ((s.name.includes('Bilophila') || s.name.includes('Clostridium perfringens')) && s.abundance > 0.5) {
-                    s.abundance -= lossPerOpportunist;
+                    s.abundance = Math.max(0.1, s.abundance - lossPerOpportunist);
                  }
             });
             break;
     }
+    
+    // 2. Reescalar todas las especies para que el total sea 100%
     const totalAbundance = currentSpecies.reduce((sum, s) => sum + s.abundance, 0);
     const scaleFactor = 100 / totalAbundance;
     currentSpecies.forEach(s => {
-        s.abundance = Math.max(0.1, s.abundance * scaleFactor);
+        s.abundance = Math.max(0.1, s.abundance * scaleFactor); // Mínimo de 0.1% para evitar la extinción total
     });
+    
+    // Una verificación final de normalización (debería ser innecesaria pero asegura el 100%)
     const finalTotalAbundance = currentSpecies.reduce((sum, s) => sum + s.abundance, 0);
     const finalScaleFactor = 100 / finalTotalAbundance;
     currentSpecies.forEach(s => s.abundance *= finalScaleFactor);
+
     recordHistory();
     updateAllUI();
 }
