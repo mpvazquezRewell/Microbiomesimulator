@@ -339,40 +339,6 @@ async function postToFunction(functionName, payload) {
     return fetchFunction(functionName, requestOptions);
 }
 
-function generateRequestId() {
-    if (window.crypto?.randomUUID) {
-        return window.crypto.randomUUID();
-    }
-    return `req-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-async function waitForAnalysisResult(requestId, { timeoutMs = 120000, intervalMs = 2000 } = {}) {
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < timeoutMs) {
-        const response = await fetchFunction(`analyze-status?requestId=${encodeURIComponent(requestId)}`);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Error al consultar el estado del análisis: ${errorText}`);
-        }
-
-        const statusPayload = await response.json();
-
-        if (statusPayload.status === 'complete') {
-            return statusPayload.result;
-        }
-
-        if (statusPayload.status === 'error') {
-            throw new Error(statusPayload.message || 'La función de análisis reportó un error.');
-        }
-
-        await new Promise(resolve => setTimeout(resolve, intervalMs));
-    }
-
-    throw new Error('La solicitud de análisis tardó demasiado tiempo en completarse.');
-}
-
 async function callGeminiForAnalysis() {
     modalTitle.innerText = "✨ Análisis del Microbioma por IA";
     modalTextContent.innerHTML = '';
@@ -383,17 +349,16 @@ async function callGeminiForAnalysis() {
     openModal();
 
     const speciesDataString = currentSpecies.map(s => `- ${s.name} (${s.role}): ${s.abundance.toFixed(1)}%`).join('\n');
-    const requestId = generateRequestId();
 
     try {
-        const response = await postToFunction('analyze', { speciesData: speciesDataString, requestId });
+        const response = await postToFunction('analyze', { speciesData: speciesDataString });
 
         if (!response.ok) {
             const errorText = await response.text();
             throw new Error(`Error del servidor: ${errorText}`);
         }
 
-        const result = await waitForAnalysisResult(requestId);
+        const result = await response.json();
 
         if (result.candidates && result.candidates.length > 0) {
             lastAnalysisResult = result.candidates[0].content.parts[0].text;
