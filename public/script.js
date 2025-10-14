@@ -32,6 +32,7 @@ let doughnutChart, lineChart;
 let history = [];
 let markdownConverter = new showdown.Converter();
 let lastAnalysisResult = '';
+let currentBalanceState = 'perfect';
 
 // --- DOM ELEMENTS ---
 const doughnutCtx = document.getElementById('doughnutChart').getContext('2d');
@@ -53,7 +54,18 @@ const mealPlanSection = document.getElementById('meal-plan-section');
 const generateMealPlanBtn = document.getElementById('generate-meal-plan-btn');
 const mealPlanLoadingSpinner = document.getElementById('meal-plan-loading-spinner');
 const mealPlanResponse = document.getElementById('meal-plan-response');
-const richnessCounter = document.getElementById('richness-counter'); 
+const richnessCounter = document.getElementById('richness-counter');
+const educationalStateMessage = document.getElementById('educational-state-message');
+const educationalRichnessCount = document.getElementById('educational-richness-count');
+
+const balanceEducationalMessages = {
+    dominance: 'Una sola especie está tomando el control. Este tipo de dominancia reduce la resiliencia del ecosistema y puede traducirse en síntomas digestivos o inflamatorios. Introducir mayor variedad de fibras y fermentar alimentos ayuda a recuperar diversidad.',
+    'richness-low': 'Tu ecosistema muestra una riqueza críticamente baja. Con pocas especies activas, el microbioma tiene menos funciones metabólicas disponibles. Prioriza alimentos fermentados, prebióticos y descanso adecuado para volver a poblarlo.',
+    opportunistic: 'El balance actual favorece a especies oportunistas. Esto suele asociarse a inflamación, molestias digestivas y menor tolerancia a la dieta. Revisa el consumo de ultraprocesados y prioriza fibras, polifenoles y grasas de calidad.',
+    perfect: '¡Excelente! Mantienes una alta producción de AGCC y buena riqueza. Esto suele vincularse con energía estable, digestiones más cómodas y una barrera intestinal robusta. Continúa reforzando la diversidad de plantas y hábitos saludables.',
+    beneficial: 'Vas por buen camino: las especies benéficas llevan la delantera. Sigue variando tu dieta vegetal y evitando excesos de azúcares o grasas saturadas para consolidar este estado.',
+    neutral: 'Estás en un punto intermedio. No hay signos de alarma, pero aún hay margen para promover especies productoras de AGCC mediante más variedad de fibras y descanso adecuado.'
+};
 
 
 // --- MODAL FUNCTIONS ---
@@ -241,35 +253,62 @@ function updateBalanceStatus() {
     if (maxAbundance >= 25) {
         balanceStatus.textContent = `⚠️ Dominancia Extrema: ${dominantSpecies.emoji} ${dominantSpecies.name}`;
         balanceStatus.className = 'font-semibold text-red-600 dark:text-red-400 animate-pulse';
+        currentBalanceState = 'dominance';
+        updateEducationalPanel(activeSpeciesCount);
         return;
     }
-    
+
+    let richnessAlert = false;
+    currentBalanceState = 'neutral';
+
     // Alerta de Pérdida de Riqueza
     if (activeSpeciesCount <= 15) {
         balanceStatus.textContent = '🔻 Riqueza Críticamente Baja';
         balanceStatus.className = 'font-semibold text-orange-500';
-        // Si el estado es peor que 'Neutro', se mantiene la alerta.
+        currentBalanceState = 'richness-low';
+        richnessAlert = true;
     }
-    
+
     // Alerta de Desbalance Oportunista
     if (beneficialShare < 0.4 || inflammationScore > 10) {
         balanceStatus.textContent = '❌ Desbalanceado a especies oportunistas';
         balanceStatus.className = 'font-semibold text-red-500';
-    } 
+        currentBalanceState = 'opportunistic';
+        richnessAlert = false;
+    }
     // Estado Óptimo
     else if (agccScore > 15 && inflammationScore < 5 && activeSpeciesCount > 18) {
         balanceStatus.textContent = '✅ Perfecto (Alta Producción AGCC y Riqueza)';
         balanceStatus.className = 'font-semibold text-green-500';
-    } 
+        currentBalanceState = 'perfect';
+        richnessAlert = false;
+    }
     // Estado Positivo
     else if (beneficialShare >= 0.6) {
         balanceStatus.textContent = '📈 Balanceado a especies benéficas';
         balanceStatus.className = 'font-semibold text-blue-500';
-    } 
+        currentBalanceState = 'beneficial';
+        richnessAlert = false;
+    }
     // Estado Neutro (Por defecto si no hay alertas graves)
-    else {
+    else if (!richnessAlert) {
         balanceStatus.textContent = '🟡 Neutro (Requiere Promoción)';
         balanceStatus.className = 'font-semibold text-yellow-500';
+        currentBalanceState = 'neutral';
+    }
+
+    updateEducationalPanel(activeSpeciesCount);
+}
+
+function updateEducationalPanel(activeSpeciesCount) {
+    if (!educationalStateMessage) return;
+
+    const message = balanceEducationalMessages[currentBalanceState] || balanceEducationalMessages.neutral;
+    educationalStateMessage.innerHTML = message;
+
+    if (educationalRichnessCount) {
+        const richnessLabel = activeSpeciesCount === 1 ? 'especie activa' : 'especies activas';
+        educationalRichnessCount.textContent = `${activeSpeciesCount} ${richnessLabel}`;
     }
 }
 
